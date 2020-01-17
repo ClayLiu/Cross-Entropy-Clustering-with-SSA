@@ -90,7 +90,7 @@ def cal_n_pair_nmi():
     
     times = 10
     nmi_table = np.zeros((11, times))   # 记录每一次若干代迭代后的 NMI
-    cluster_maker = JcesSc_V.Jce_sSC_simple(X = X, label = label, c = 4, slap_num = 30)
+    cluster_maker = JcesSc_V.Jce_sSC_simple(X = X, label = label, c = 3, slap_num = 30)
     print(X)
     nmi_for_every_time = np.zeros(times)
     
