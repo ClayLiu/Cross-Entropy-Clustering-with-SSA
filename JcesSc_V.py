@@ -3,6 +3,7 @@ import random
 import matplotlib.pyplot as plt 
 import slap_V
 import math
+import U_and_V
 # import NMI
 
 class Jce_sSC_simple():
@@ -31,51 +32,7 @@ class Jce_sSC_simple():
             fitness_func =      self.Jce_sSC_slap,
             V_bound =           self.X_bound
         )
-    
-    def get_U_with_o_dis(self, V : np.ndarray) -> np.ndarray:
-        """   
-        根据 V 生成对应的 类隶属度矩阵 U(欧氏距离)
-        """
-        U = np.zeros((self.c, self.n))
-        for i in range(self.n):
-            
-            # 算出该点与各个聚类中心的距离（欧式距离）
-            o_distance = np.array([self.__get_o_distance__(self.X[:, i], V[:, j]) for j in range(self.c)]) 
-
-            # 最值调转
-            o_distance = np.max(o_distance) - o_distance + np.min(o_distance)
-
-            # 归一化
-            o_distance /= np.sum(o_distance)
-            
-            # 引入softmax 将使结果对樽海鞘模拟敏感
-            # # softmax
-            # o_distance = self.__softmax__(o_distance)
-            
-            U[:, i] = o_distance
         
-        return U
-    
-    def get_U_with_m_dis(self, V : np.ndarray) -> np.ndarray:
-        """   
-        根据 V 生成对应的 类隶属度矩阵 U(曼哈顿距离)
-        """
-        U = np.zeros((self.c, self.n))
-        for i in range(self.n):
-            
-            # 算出该点与各个聚类中心的距离（曼哈顿距离）
-            m_distance = np.array([self.__get_m_distance__(self.X[:, i], V[:, j]) for j in range(self.c)]) 
-
-            # 最值调转
-            m_distance = np.max(m_distance) - m_distance + np.min(m_distance)
-
-            # 归一化
-            m_distance /= np.sum(m_distance)
-                        
-            U[:, i] = m_distance
-        
-        return U
-    
     # def get_U_according_parper(self, V : np.array) -> np.ndarray:
     #     """   
     #     根据 V 生成对应的 类隶属度矩阵 U
@@ -89,16 +46,6 @@ class Jce_sSC_simple():
         
     #     return U 
     
-    def __get_o_distance__(self, vector_1 : np.ndarray, vector_2 : np.ndarray):
-        return np.sqrt(np.sum((vector_1 - vector_2) ** 2))
-    def __get_m_distance__(self, vector_1 : np.ndarray, vector_2 : np.ndarray):
-        return np.sum(np.abs(vector_1 - vector_2))
-        
-    def __softmax__(self, array : np.ndarray):
-        max_value = np.max(array)
-        exp_arr = np.exp(array - max_value)
-        return exp_arr / np.sum(exp_arr)
-
     def _get_unique_pairs(self, n : int, n_pair : int, pick = 'random'):
         ''' 生成成对挑选矩阵，避免np.random.choice 挑选到重复的条目 '''
         random_num = 0
@@ -168,7 +115,7 @@ class Jce_sSC_simple():
         return punish_matrix
     
     def make_up_punish_matrix_only_ML(self, gamma : tuple, n_pair = 0) -> np.ndarray:
-        ''' 先挑选同类的 '''
+        ''' 都挑选同类的 '''
         n = self.n
         punish_matrix = np.zeros((n, n))
 
@@ -184,8 +131,26 @@ class Jce_sSC_simple():
 
         return punish_matrix
 
+    def make_up_punish_matrix_only_CL(self, gamma : tuple, n_pair = 0) -> np.ndarray:
+        ''' 都挑选不同类的 '''
+        n = self.n
+        punish_matrix = np.zeros((n, n))
+
+        pairs = self.pick_not_same_cluster(n_pair)
+        for pair in pairs:
+            j = pair[0]
+            k = pair[1]
+            punish_matrix[j][k] = gamma[0]
+            punish_matrix[k][j] = gamma[0]   
+
+        for i in range(n):
+            punish_matrix[i][i] = gamma[1]
+
+        return punish_matrix
+
     def _make_up_V(self) -> np.ndarray:
         ''' 在数据范围中随机生成类中心点 '''
+        
         V = np.zeros((self.X.shape[0], self.c))
         for i in range(self.X.shape[0]):
             for j in range(self.c):
@@ -196,7 +161,7 @@ class Jce_sSC_simple():
         _min = np.min(self.X, axis=1)
         _max = np.max(self.X, axis=1)
 
-        bound = [(l, u) for l, u in zip(_min, _max)]    # 转成元组列表防止被改动
+        bound = [(l, u) for l, u in zip(_min, _max)]
         return bound
 
     def _H(self, U : np.ndarray, j : int, k : int):
@@ -207,7 +172,9 @@ class Jce_sSC_simple():
         # return - np.sum(miu_1 * np.log(miu_2))
 
         ''' new version '''
-        where = miu_1 > 0.0001
+        where_1 = miu_1 > 0.00001
+        where_2 = miu_2 > 0.00001
+        where = np.array([bool_1 and bool_2 for bool_1, bool_2 in zip(where_1, where_2)])
         entropy = miu_1[where] * np.log(miu_2[where])
         return - np.sum(entropy)
 
@@ -228,7 +195,7 @@ class Jce_sSC_simple():
         return part_one - part_two
 
     def Jce_sSC_slap(self, slap_i : slap_V.Slap):
-        return self.Jce_sSC(self.get_U_with_o_dis(slap_i.V), slap_i.V)
+        return self.Jce_sSC(U_and_V.get_U_with_dis(self.X, slap_i.V), slap_i.V)
 
     def iteration(self, iter_num):
         self.Slap_Swarm.iteration(iter_num)
@@ -238,8 +205,8 @@ class Jce_sSC_simple():
         """   
         根据 V 生成对应的 聚类结果
         """
-        U = self.get_U_with_o_dis(V)
-        return np.argmax(U, axis=0) + 1
+        U = U_and_V.get_U_with_dis(self.X, V)
+        return np.argmax(U, axis=0)
 
     def SS_refresh(self):
 
